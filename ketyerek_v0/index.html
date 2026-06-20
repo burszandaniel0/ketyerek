@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>álmos</title>
+    <link rel="preload" href="favicon.ico" as="image" type="image/x-icon">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            font-family: Helvetica, Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #welcome-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 1;
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            pointer-events: all;
+        }
+        #welcome-text {
+            color: #ffffff;
+            font-size: 3rem;
+            transform: scale(0.6);
+            animation: textFadeIn 1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+        }
+        @keyframes textFadeIn {
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        .fade-out {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        #video-controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            background: rgba(26, 26, 26, 0.65);
+            padding: 10px 20px;
+            border-radius: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            z-index: 500;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            opacity: 0;
+            transform: translate(-50%, 20px);
+            transition: opacity 1s ease, transform 1s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        #video-controls.visible {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        .vid-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .vid-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            transform: scale(1.08);
+        }
+        .vid-btn.active {
+            background: #ffffff;
+            color: #1a1a1a;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+        #floating-label {
+            position: fixed;
+            top: 0;
+            left: 0;
+            color: #ffffff;
+            background: rgba(26, 26, 26, 0.85);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            font-weight: 400;
+            pointer-events: none;
+            white-space: nowrap;
+            opacity: 0;
+            transform: translate(-50%, -100%) scale(0.9);
+            transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        #floating-label.visible {
+            opacity: 1;
+            transform: translate(-50%, -100%) scale(1);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="welcome-overlay">
+        <div id="welcome-text">szia álmos</div>
+    </div>
+    <div id="video-controls">
+        <button class="vid-btn active" onclick="switchVideo(1, this)">1</button>
+        <button class="vid-btn" onclick="switchVideo(2, this)">2</button>
+        <button class="vid-btn" onclick="switchVideo(3, this)">3</button>
+    </div>
+    <div id="floating-label"></div>
+    <script>
+        window.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+        }, false);
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87cefa); 
+        scene.fog = new THREE.Fog(0xd3d3d3, 7, 25);
+        const targetFOV = 65;
+        const camera = new THREE.PerspectiveCamera(120, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.6, 4);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xfff8e7, 0.85);
+        directionalLight.position.set(8, 12, 6);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.camera.left = -15;
+        directionalLight.shadow.camera.right = 15;
+        directionalLight.shadow.camera.top = 15;
+        directionalLight.shadow.camera.bottom = -15;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 30;
+        directionalLight.shadow.mapSize.width = 4096;
+        directionalLight.shadow.mapSize.height = 4096;
+        directionalLight.shadow.bias = -0.0005; 
+        scene.add(directionalLight);
+        const planeSize = 30; 
+        const geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xdddddd, 
+            roughness: 0.85,
+            metalness: 0.05,
+        });
+        const plane = new THREE.Mesh(geometry, material);
+        plane.rotation.x = -Math.PI / 2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+        const videoWidth = 7;
+        const videoHeight = 3.93; 
+        const videoGeo = new THREE.PlaneGeometry(videoWidth, videoHeight);
+        const video = document.createElement('video');
+        video.src = 'video1.mp4';
+        video.crossOrigin = 'anonymous';
+        video.loop = true;
+        video.muted = false; 
+        video.playsInline = true;
+        video.play().catch(err => {
+            console.log("Audio autoplay blocked by browser", err);
+        });
+        const videoTexture = new THREE.VideoTexture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.format = THREE.RGBFormat;
+        const videoMat = new THREE.MeshBasicMaterial({ 
+            map: videoTexture,
+        });
+        const videoPlane = new THREE.Mesh(videoGeo, videoMat);
+        videoPlane.position.set(0, 2.5, -8); 
+        scene.add(videoPlane);
+        function switchVideo(index, buttonEl) {
+            document.querySelectorAll('.vid-btn').forEach(btn => btn.classList.remove('active'));
+            buttonEl.classList.add('active');
+            video.src = `video${index}.mp4`;
+            video.load();
+            video.play().catch(err => console.log(err));
+        }
+        let isIntroAnimating = false;
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('welcome-overlay').classList.add('fade-out');
+                document.getElementById('video-controls').classList.add('visible');
+                isIntroAnimating = true;
+                if (video.paused) {
+                    video.play().catch(() => {});
+                }
+                switchStateTimer();
+            }, 1500); 
+        });
+        window.addEventListener('click', () => {
+            if (video.paused) {
+                video.play();
+            }
+            video.muted = false; 
+        });
+        const items = [
+            { type: 'box',      size: 2.0, x: -8.0, z: -9.0, color: 0xb5ead7 },
+            { type: 'cylinder', size: 1.8, x: -5.5, z: 1.0,  color: 0xe2f0cb },
+            { type: 'box',      size: 1.2, x: -4.0, z: 0.0,  color: 0xffb7b2 },
+            { type: 'cylinder', size: 2.2, x: 5.5,  z: -6.0, color: 0xffc6ff },
+            { type: 'box',      size: 1.6, x: 4.5,  z: -3.0, color: 0xbdb2ff },
+            { type: 'sphere',   size: 1.4, x: 5.0,  z: 0.0,  color: 0xa0c4ff },
+            { type: 'box',      size: 1.8, x: 4.0,  z: 2.5,  color: 0xffdac1 }
+        ];
+        items.forEach(item => {
+            let geo;
+            if (item.type === 'box') {
+                geo = new THREE.BoxGeometry(item.size, item.size, item.size);
+            } else if (item.type === 'sphere') {
+                geo = new THREE.SphereGeometry(item.size / 2, 32, 32);
+            } else if (item.type === 'cylinder') {
+                geo = new THREE.CylinderGeometry(item.size / 3, item.size / 3, item.size, 32);
+            }
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: item.color, 
+                roughness: 0.5,
+                metalness: 0.02
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(item.x, item.size / 2, item.z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        });
+        const targetHeight = 1.5; 
+        const imageGeo = new THREE.PlaneGeometry(1, 1);
+        const textureLoader = new THREE.TextureLoader();
+        const imageMat = new THREE.MeshBasicMaterial({
+            side: THREE.FrontSide, 
+            transparent: true
+        });
+        const imagePlane = new THREE.Mesh(imageGeo, imageMat);
+        scene.add(imagePlane);
+        textureLoader.load('img0.avif', (texture) => {
+            imageMat.map = texture;
+            imageMat.needsUpdate = true;
+            const imageElement = texture.image;
+            if (imageElement && imageElement.width && imageElement.height) {
+                const aspect = imageElement.width / imageElement.height;
+                imagePlane.scale.set(targetHeight * aspect, targetHeight, 1);
+            }
+        });
+        let currentMovementState = 'active'; 
+        function switchStateTimer() {
+            const randomTimeRange = THREE.MathUtils.randFloat(10000, 20000);
+            setTimeout(() => {
+                if (currentMovementState === 'active') {
+                    currentMovementState = 'calm';
+                } else if (currentMovementState === 'calm') {
+                    currentMovementState = 'fly';
+                } else {
+                    currentMovementState = 'active';
+                }
+                switchStateTimer();
+            }, randomTimeRange);
+        }
+        const messagesArray = [
+            "👋",
+            "it's two in the morning",
+            "my name is simson",
+            "good day",
+            "bouncy bouncy",
+            "yay",
+            "wow"
+        ];
+        const raycaster = new THREE.Raycaster();
+        const mouseVector = new THREE.Vector2(-1000, -1000); 
+        const labelEl = document.getElementById('floating-label');
+        let isMouseHoveringPlane = false;
+        let isTextActive = false;
+        let textClearTimeout = null;
+        function triggerHoverMessage() {
+            if (isTextActive) return; 
+            if (Math.random() < 0.3) {
+                isTextActive = true;
+                const chosenText = messagesArray[Math.floor(Math.random() * messagesArray.length)];
+                labelEl.textContent = chosenText;
+                labelEl.classList.add('visible');
+                textClearTimeout = setTimeout(() => {
+                    labelEl.classList.remove('visible');
+                    setTimeout(() => { isTextActive = false; }, 400); 
+                }, 5000);
+            }
+        }
+        const clouds = [];
+        const cloudCount = 8;
+        const cloudMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide
+        });
+        for (let i = 0; i < cloudCount; i++) {
+            const w = THREE.MathUtils.randFloat(3, 6);
+            const h = THREE.MathUtils.randFloat(1.5, 3);
+            const cloudGeo = new THREE.PlaneGeometry(w, h);
+            const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+            const x = THREE.MathUtils.randFloat(-15, 15);
+            const y = THREE.MathUtils.randFloat(6, 9);
+            const z = THREE.MathUtils.randFloat(-12, 2);
+            cloudMesh.position.set(x, y, z);
+            cloudMesh.rotation.x = -Math.PI / 2;
+            cloudMesh.userData = { speed: THREE.MathUtils.randFloat(0.005, 0.015) };
+            scene.add(cloudMesh);
+            clouds.push(cloudMesh);
+        }
+        let rawMouseX = 0;
+        let rawMouseY = 0;
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        window.addEventListener('mousemove', (event) => {
+            rawMouseX = (event.clientX / window.innerWidth) * 2 - 1;
+            rawMouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+            mouseVector.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouseVector.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+        function animate() {
+            requestAnimationFrame(animate);
+            const timestamp = performance.now();
+            let speedFactor, rangeX, heightAmplitude, heightFrequency, rangeZ, offsetZ;
+            if (currentMovementState === 'calm') {
+                speedFactor = timestamp * 0.0002;
+                rangeX = 6.0;                    
+                heightAmplitude = 0.15;          
+                heightFrequency = 1.5;
+                rangeZ = 3.0;                    
+                offsetZ = -4.0;
+            } else if (currentMovementState === 'active') {
+                speedFactor = timestamp * 0.0006;
+                rangeX = 11.5;
+                heightAmplitude = 4.0;
+                heightFrequency = 3.5;
+                rangeZ = 7.0;
+                offsetZ = -5.0;
+            }
+            if (currentMovementState === 'fly') {
+                imagePlane.position.x = ((timestamp * 0.002) % 30) - 15;
+                imagePlane.position.y = 7.5;
+                imagePlane.position.z = -5.0;
+                imagePlane.lookAt(camera.position);
+            } else {
+                imagePlane.position.x = Math.sin(speedFactor * 2.0) * rangeX;
+                imagePlane.position.y = (targetHeight / 2) + Math.abs(Math.sin(speedFactor * heightFrequency)) * heightAmplitude;
+                imagePlane.position.z = offsetZ + Math.cos(speedFactor * 1.0) * rangeZ;
+                imagePlane.lookAt(new THREE.Vector3(camera.position.x, imagePlane.position.y, camera.position.z));
+            }
+            raycaster.setFromCamera(mouseVector, camera);
+            const intersections = raycaster.intersectObject(imagePlane);
+            if (intersections.length > 0) {
+                if (!isMouseHoveringPlane) {
+                    isMouseHoveringPlane = true;
+                    triggerHoverMessage(); 
+                }
+            } else {
+                isMouseHoveringPlane = false;
+            }
+            if (labelEl.classList.contains('visible')) {
+                const vector3D = new THREE.Vector3();
+                imagePlane.getWorldPosition(vector3D);
+                vector3D.y += (targetHeight / 2) + 0.3; 
+                vector3D.project(camera);
+                const screenPixelX = (vector3D.x * .5 + .5) * window.innerWidth;
+                const screenPixelY = (-(vector3D.y * .5) + .5) * window.innerHeight;
+                labelEl.style.left = `${screenPixelX}px`;
+                labelEl.style.top = `${screenPixelY}px`;
+            }
+            clouds.forEach(cloud => {
+                cloud.position.x += cloud.userData.speed;
+                if (cloud.position.x > 15) {
+                    cloud.position.x = -15;
+                    cloud.position.z = THREE.MathUtils.randFloat(-12, 2); 
+                }
+            });
+            if (isIntroAnimating && camera.fov > targetFOV) {
+                camera.fov += (targetFOV - camera.fov) * 0.12; 
+                camera.updateProjectionMatrix();
+                if (Math.abs(camera.fov - targetFOV) < 0.1) {
+                    camera.fov = targetFOV;
+                    camera.updateProjectionMatrix();
+                    isIntroAnimating = false;
+                }
+            }
+            targetRotationY = -rawMouseX * (Math.PI * 0.09); 
+            targetRotationX = rawMouseY * (Math.PI * 0.06);  
+            camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.1;
+            camera.rotation.x += (targetRotationX - camera.rotation.x) * 0.1;
+            camera.rotation.z = 0;
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
