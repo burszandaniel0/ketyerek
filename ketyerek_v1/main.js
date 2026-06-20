@@ -1,0 +1,1 @@
+import{Engine}from"./engine.js";import{World}from"./world.js";"serviceWorker"in navigator&&window.addEventListener("load",()=>{navigator.serviceWorker.register("./sw.js").then(e=>console.log("Cache controller active.")).catch(e=>console.error("Cache controller failed to bind:",e))});const engine=new Engine,world=new World(engine);engine.start((e,r)=>{world.update(e,r)});

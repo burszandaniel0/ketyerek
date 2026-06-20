@@ -1,0 +1,1 @@
+self.addEventListener("fetch",e=>{if(e.request.url.endsWith(".mp3"))return;const t=new Request(e.request,{cache:"reload"});e.respondWith(fetch(t))}),self.addEventListener("install",()=>self.skipWaiting()),self.addEventListener("activate",e=>e.waitUntil(clients.claim()));
